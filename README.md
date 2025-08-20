@@ -46,32 +46,45 @@ The plugin automatically registers with Data Machine's pipeline system. No manua
 **Automatic Registration**:
 - Handler: `structured_data` (publish type)
 - AI Tool: `save_semantic_analysis`
-- Trigger: Content publication/update events
+- Integration: Via Data Machine's visual pipeline builder
 
 ### WordPress Integration
 
-Create or update a Data Machine pipeline that includes the semantic analysis tool:
+**Option 1: Visual Pipeline Builder** (Recommended)
+1. Navigate to Data Machine → Pipelines in WordPress admin
+2. Create new pipeline: "Content Semantic Analysis"
+3. Add steps: Fetch (WordPress) → AI → Publish (Structured Data)
+4. Configure flow handlers and scheduling through the interface
+5. The `structured_data` handler will appear in the publish step dropdown
 
+**Option 2: Programmatic Creation**
 ```php
-// Example pipeline configuration
-$pipeline_config = [
-    'name' => 'Content Semantic Analysis',
-    'triggers' => ['post_publish', 'post_update'],
-    'ai_tools' => ['save_semantic_analysis'],
-    'handlers' => ['structured_data']
-];
+// Create pipeline via Data Machine actions
+do_action('dm_create', 'pipeline', ['pipeline_name' => 'Content Semantic Analysis']);
+
+// Add pipeline steps
+do_action('dm_create', 'step', ['step_type' => 'fetch', 'pipeline_id' => $pipeline_id]);
+do_action('dm_create', 'step', ['step_type' => 'ai', 'pipeline_id' => $pipeline_id]);  
+do_action('dm_create', 'step', ['step_type' => 'publish', 'pipeline_id' => $pipeline_id]);
+
+// Configure flow with handlers
+do_action('dm_update_flow_handler', $fetch_flow_step_id, 'wordpress', $wordpress_settings);
+do_action('dm_update_flow_handler', $publish_flow_step_id, 'structured_data', []);
+
+// Set up scheduling
+do_action('dm_update_flow_schedule', $flow_id, 'active', 'hourly');
 ```
 
 ## Usage Examples
 
 ### Basic Content Analysis
 
-When you publish or update WordPress content, the plugin automatically:
+The plugin works through Data Machine's pipeline system:
 
-1. **Analyzes Content**: AI examines post content for semantic metadata
-2. **Extracts Classifications**: Determines content type, audience level, complexity
-3. **Stores Metadata**: Saves analysis to WordPress post meta
-4. **Enhances Schema**: Injects AI enrichment into Yoast schema output
+1. **WordPress Fetch**: Data Machine's WordPress handler retrieves post content
+2. **AI Analysis**: AI step analyzes content using the `save_semantic_analysis` tool
+3. **Structured Data Storage**: Plugin handler stores analysis to WordPress post meta
+4. **Schema Enhancement**: Yoast integration injects AI enrichment into schema output
 
 ### Retrieving Semantic Data
 
@@ -278,23 +291,29 @@ if (class_exists('DM_StructuredData_Handler')) {
 
 ### Test Semantic Analysis
 
-1. **Create Test Content**: Publish a new post with substantial content
-2. **Trigger Analysis**: Data Machine pipeline should automatically process
-3. **Verify Data**: Check post meta for `_dm_structured_data`
-4. **Validate Schema**: Inspect page source for enhanced Yoast schema
+1. **Create Pipeline**: Use Data Machine's visual pipeline builder or programmatic actions to create pipeline with WordPress fetch → AI → Structured Data steps
+2. **Configure Flow**: Set WordPress handler to target specific post types, configure structured data handler
+3. **Manual Execution**: Test with `do_action('dm_run_flow_now', $flow_id, 'manual');`
+4. **Verify Results**: Check Data Machine Jobs page for execution status
+5. **Validate Data**: Check post meta for `_dm_structured_data` and Yoast schema output
 
 ### Debug Pipeline Processing
 
 ```php
-// Enable Data Machine debugging
-add_filter('dm_debug_mode', '__return_true');
+// Data Machine logging system
+do_action('dm_log', 'info', 'Testing structured data pipeline', [
+    'flow_id' => $flow_id,
+    'post_id' => $post_id
+]);
 
-// Check semantic data after content publication
-add_action('save_post', function($post_id) {
-    if (DM_StructuredData_Handler::has_structured_data($post_id)) {
-        error_log("Semantic data saved for post {$post_id}");
-    }
-});
+// Manual pipeline execution for testing
+do_action('dm_run_flow_now', $flow_id, 'manual');
+
+// Clear processed items for re-testing
+do_action('dm_delete', 'processed_items', $flow_id, ['delete_by' => 'flow_id']);
+
+// Check job status in Data Machine admin
+// Navigate to Data Machine → Jobs for execution monitoring
 ```
 
 ## Extending the Plugin
@@ -368,12 +387,19 @@ if ($semantic_data) {
 Enable debugging to trace pipeline execution:
 
 ```php
-// In wp-config.php
+// Browser debugging
+window.dmDebugMode = true;
+
+// PHP debugging
 define('WP_DEBUG', true);
 define('WP_DEBUG_LOG', true);
 
-// Check debug.log for pipeline and AI tool execution
-tail -f /path/to/wordpress/wp-content/debug.log
+// Data Machine logs are at:
+// /wp-content/uploads/data-machine-logs/data-machine.log
+// View via Data Machine → Logs admin page
+
+// Check recent logs programmatically
+$recent_logs = apply_filters('dm_log_file', [], 'get_recent', 100);
 ```
 
 ## Support
