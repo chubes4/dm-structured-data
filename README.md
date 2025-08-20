@@ -2,7 +2,7 @@
 
 **⚠️ EXPERIMENTAL PLUGIN** - This is an experimental extension for testing AI-powered structured data enhancement concepts.
 
-AI-powered semantic analysis for enhanced WordPress structured data via [Data Machine](https://github.com/chubes/data-machine) pipelines. This plugin automatically analyzes WordPress content using AI and injects semantic metadata into Yoast SEO schema markup to improve AI crawler understanding and search engine optimization.
+AI-powered semantic analysis for enhanced WordPress structured data via [Data Machine](https://github.com/chubes4/data-machine) pipelines. This plugin automatically analyzes WordPress content using AI and injects semantic metadata into Yoast SEO schema markup to improve AI crawler understanding and search engine optimization.
 
 ## Features
 
@@ -23,7 +23,7 @@ AI-powered semantic analysis for enhanced WordPress structured data via [Data Ma
 
 1. **Install Data Machine Plugin** (required dependency)
    ```bash
-   # Install from: https://github.com/chubes/data-machine
+   # Install from: https://github.com/chubes4/data-machine
    # Ensure Data Machine is installed and activated first
    ```
 
@@ -383,7 +383,7 @@ tail -f /path/to/wordpress/wp-content/debug.log
 For technical support and feature requests:
 - **Developer**: Chris Huber
 - **Website**: https://chubes.net
-- **Main Project**: [Data Machine](https://github.com/chubes/data-machine)
+- **Main Project**: [Data Machine](https://github.com/chubes4/data-machine)
 - **Documentation**: Refer to Data Machine plugin documentation for pipeline configuration
 
 ## License
