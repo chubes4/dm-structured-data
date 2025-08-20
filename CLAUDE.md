@@ -88,9 +88,7 @@ The `save_semantic_analysis` tool accepts these semantic classification paramete
     "primaryIntent": "educational", 
     "actionability": "immediately-actionable",
     "complexityScore": 6,
-    "estimatedCompletionTime": 45,
-    "aiAnalysisDate": "2025-01-20T14:30:00Z",
-    "aiModel": "claude-3-sonnet"
+    "estimatedCompletionTime": 45
   }
 }
 ```

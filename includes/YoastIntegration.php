@@ -147,13 +147,6 @@ class DM_StructuredData_YoastIntegration {
             }
         }
         
-        if (isset($structured_data['generated_at'])) {
-            $enrichment['aiAnalysisDate'] = date('Y-m-d\TH:i:s\Z', $structured_data['generated_at']);
-        }
-        
-        if (isset($structured_data['ai_model'])) {
-            $enrichment['aiModel'] = $structured_data['ai_model'];
-        }
         
         return $enrichment;
     }
