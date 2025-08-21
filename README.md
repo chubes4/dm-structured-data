@@ -16,8 +16,8 @@ AI-powered semantic analysis for enhanced WordPress structured data via [Data Ma
 
 - WordPress 5.0 or higher
 - PHP 8.0 or higher
-- **Data Machine plugin** (required dependency)
-- Yoast SEO plugin (recommended for schema enhancement)
+- **Data Machine plugin** (required - plugin will not activate without it)
+- Yoast SEO plugin (optional - for automatic schema enhancement)
 
 ## Installation
 
@@ -36,43 +36,57 @@ AI-powered semantic analysis for enhanced WordPress structured data via [Data Ma
 3. **Activate Plugin**
    - Navigate to WordPress Admin → Plugins
    - Activate "Data Machine - Structured Data Extension"
+   - **Note**: Plugin will not activate if Data Machine is not installed/active
+
+4. **Optional: Install Yoast SEO** (for schema enhancement)
+   - Install and activate Yoast SEO plugin
+   - Structured data will automatically enhance Yoast's schema output
 
 ## Configuration
 
 ### Data Machine Pipeline Setup
 
-The plugin automatically registers with Data Machine's pipeline system. No manual configuration required.
+The plugin provides an admin interface for managing the structured data analysis pipeline. Pipeline creation uses Action Scheduler for reliable background processing.
 
-**Automatic Registration**:
+**Admin Interface Access**:
+- Navigate to Data Machine → Structured Data in WordPress admin
+- Create pipeline through the admin interface (automated setup)
+- Monitor pipeline status and manage semantic data
+
+**Automatic Pipeline Creation**:
+- Pipeline Name: "Structured Data Analysis Pipeline"
 - Handler: `structured_data` (publish type)
 - AI Tool: `save_semantic_analysis`
-- Integration: Via Data Machine's visual pipeline builder
+- Background Processing: WordPress Action Scheduler
 
 ### WordPress Integration
 
-**Option 1: Visual Pipeline Builder** (Recommended)
-1. Navigate to Data Machine → Pipelines in WordPress admin
-2. Create new pipeline: "Content Semantic Analysis"
-3. Add steps: Fetch (WordPress) → AI → Publish (Structured Data)
-4. Configure flow handlers and scheduling through the interface
-5. The `structured_data` handler will appear in the publish step dropdown
+**Automated Setup** (Recommended)
+1. Navigate to Data Machine → Structured Data in WordPress admin
+2. Click "Create Pipeline" to initiate background setup
+3. Monitor creation status (completed automatically via Action Scheduler)
+4. Use admin interface to analyze posts and manage semantic data
+5. Pipeline automatically configures: Fetch (WordPress) → AI → Publish (Structured Data)
 
-**Option 2: Programmatic Creation**
+**Manual Pipeline Creation** (Advanced)
 ```php
-// Create pipeline via Data Machine actions
-do_action('dm_create', 'pipeline', ['pipeline_name' => 'Content Semantic Analysis']);
+// Trigger asynchronous pipeline creation
+if (function_exists('as_schedule_single_action')) {
+    as_schedule_single_action(time(), 'dm_structured_data_create_pipeline_async');
+}
 
-// Add pipeline steps
-do_action('dm_create', 'step', ['step_type' => 'fetch', 'pipeline_id' => $pipeline_id]);
-do_action('dm_create', 'step', ['step_type' => 'ai', 'pipeline_id' => $pipeline_id]);  
-do_action('dm_create', 'step', ['step_type' => 'publish', 'pipeline_id' => $pipeline_id]);
+// Check creation status
+$status = get_option('dm_structured_data_creation_status');
+// Status values: 'not_started', 'in_progress', 'completed', 'failed'
 
-// Configure flow with handlers
-do_action('dm_update_flow_handler', $fetch_flow_step_id, 'wordpress', $wordpress_settings);
-do_action('dm_update_flow_handler', $publish_flow_step_id, 'structured_data', []);
-
-// Set up scheduling
-do_action('dm_update_flow_schedule', $flow_id, 'active', 'hourly');
+// Verify pipeline exists by name
+$pipelines = apply_filters('dm_get_pipelines', []);
+foreach ($pipelines as $pipeline) {
+    if ($pipeline['pipeline_name'] === 'Structured Data Analysis Pipeline') {
+        // Pipeline ready for use
+        break;
+    }
+}
 ```
 
 ## Usage Examples
@@ -291,29 +305,54 @@ if (class_exists('DM_StructuredData_Handler')) {
 
 ### Test Semantic Analysis
 
-1. **Create Pipeline**: Use Data Machine's visual pipeline builder or programmatic actions to create pipeline with WordPress fetch → AI → Structured Data steps
-2. **Configure Flow**: Set WordPress handler to target specific post types, configure structured data handler
-3. **Manual Execution**: Test with `do_action('dm_run_flow_now', $flow_id, 'manual');`
-4. **Verify Results**: Check Data Machine Jobs page for execution status
+1. **Create Pipeline**: Use admin interface (Data Machine → Structured Data) to create pipeline automatically
+2. **Analyze Posts**: Use post search and analysis features in admin interface
+3. **Manual Execution**: Test individual posts via admin interface or programmatically:
+   ```php
+   // Get pipeline components
+   $flow_id = get_option('dm_structured_data_flow_id');
+   $fetch_step_id = get_option('dm_structured_data_fetch_step_id');
+   
+   // Configure for specific post
+   do_action('dm_update_flow_handler', $fetch_step_id, 'wordpress', [
+       'post_id' => $post_id
+   ]);
+   
+   // Execute analysis
+   do_action('dm_run_flow_now', $flow_id);
+   ```
+4. **Monitor Status**: Check pipeline creation and execution status via admin interface
 5. **Validate Data**: Check post meta for `_dm_structured_data` and Yoast schema output
 
 ### Debug Pipeline Processing
 
 ```php
-// Data Machine logging system
+// Check pipeline creation status
+$status = get_option('dm_structured_data_creation_status');
+echo "Pipeline Status: " . $status; // 'not_started', 'in_progress', 'completed', 'failed'
+
+// Verify pipeline exists
+$pipelines = apply_filters('dm_get_pipelines', []);
+foreach ($pipelines as $pipeline) {
+    if ($pipeline['pipeline_name'] === 'Structured Data Analysis Pipeline') {
+        echo "Pipeline ID: " . $pipeline['pipeline_id'];
+        break;
+    }
+}
+
+// Data Machine logging for background job
 do_action('dm_log', 'info', 'Testing structured data pipeline', [
-    'flow_id' => $flow_id,
+    'flow_id' => get_option('dm_structured_data_flow_id'),
     'post_id' => $post_id
 ]);
 
-// Manual pipeline execution for testing
-do_action('dm_run_flow_now', $flow_id, 'manual');
+// Manual execution using stored IDs
+$flow_id = get_option('dm_structured_data_flow_id');
+do_action('dm_run_flow_now', $flow_id);
 
-// Clear processed items for re-testing
-do_action('dm_delete', 'processed_items', $flow_id, ['delete_by' => 'flow_id']);
-
-// Check job status in Data Machine admin
-// Navigate to Data Machine → Jobs for execution monitoring
+// Monitor Action Scheduler jobs
+// Navigate to Tools → Scheduled Actions to view background jobs
+// Check Data Machine → Jobs for pipeline execution status
 ```
 
 ## Extending the Plugin
@@ -370,17 +409,26 @@ if ($semantic_data) {
 **Plugin Not Working**
 - Verify Data Machine plugin is installed and activated
 - Check WordPress/PHP version requirements
-- Ensure proper file permissions
+- Ensure Action Scheduler is available (included with WooCommerce or Data Machine)
+- Confirm admin interface is accessible at Data Machine → Structured Data
+
+**Pipeline Creation Failed**
+- Check Action Scheduler status at Tools → Scheduled Actions
+- Verify pipeline creation status: `get_option('dm_structured_data_creation_status')`
+- Review Data Machine logs for background job errors
+- Ensure Data Machine handlers are properly registered
 
 **No Semantic Data Generated**
-- Confirm Data Machine pipeline includes `save_semantic_analysis` tool
-- Check if content triggers pipeline execution
+- Confirm pipeline exists and is properly configured
+- Check if analysis was triggered via admin interface or programmatically
 - Verify post ID is available in pipeline context
+- Review Data Machine Jobs page for execution errors
 
-**Schema Not Enhanced**
-- Ensure Yoast SEO is active and generating schema
+**Schema Not Enhanced** (Yoast Integration)
+- Install and activate Yoast SEO plugin if you want automatic schema enhancement
 - Check if post has semantic data stored
 - Verify schema type is supported (Article, BlogPosting, WebPage, CollectionPage)
+- **Note**: Plugin works without Yoast - semantic data is still stored and accessible via API
 
 ### Debug Mode
 

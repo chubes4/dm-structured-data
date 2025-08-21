@@ -60,13 +60,19 @@ class DM_StructuredData_YoastIntegration {
      * Attempts multiple methods to determine the current post ID
      * from Yoast schema generation context or global state.
      * 
-     * @param array $context Schema generation context
+     * @param mixed $context Schema generation context (object or array)
      * @return int|null Post ID or null if not found
      */
     private function get_post_id_from_context($context) {
         global $post;
         
-        if (isset($context['post']) && is_object($context['post'])) {
+        // Handle Yoast Meta_Tags_Context object (current Yoast version)
+        if (is_object($context) && property_exists($context, 'post') && is_object($context->post)) {
+            return $context->post->ID;
+        }
+        
+        // Fallback for array format (older Yoast versions)
+        if (is_array($context) && isset($context['post']) && is_object($context['post'])) {
             return $context['post']->ID;
         }
         
