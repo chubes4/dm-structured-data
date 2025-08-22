@@ -63,6 +63,7 @@ class DM_StructuredData {
     
     private function load_includes() {
         require_once DM_STRUCTURED_DATA_PATH . 'includes/StructuredDataHandler.php';
+        require_once DM_STRUCTURED_DATA_PATH . 'includes/CreatePipeline.php';
         
         // Only load Yoast integration if Yoast is active
         if ($this->is_yoast_active()) {
@@ -165,119 +166,10 @@ new DM_StructuredData();
  * wp_send_json interruption issues during complex Data Machine setup.
  * Uses name-based pipeline detection and stores component IDs in options.
  */
-add_action('dm_structured_data_create_pipeline_async', 'dm_structured_data_create_pipeline_job');
-
-function dm_structured_data_create_pipeline_job() {
-    try {
-        // Check Data Machine dependency availability in background context
-        if (!has_filter('dm_handlers')) {
-            update_option('dm_structured_data_creation_status', 'failed');
-            do_action('dm_log', 'error', 'Data Machine plugin not available during async pipeline creation');
-            return;
-        }
-        
-        // Create pipeline using Data Machine action (reliable in Action Scheduler context)
-        do_action('dm_create', 'pipeline', ['pipeline_name' => 'Structured Data Analysis Pipeline']);
-        
-        // Use name-based detection to get pipeline_id (more reliable than relying on action response)
-        $pipelines = apply_filters('dm_get_pipelines', []);
-        $pipeline_id = null;
-        foreach ($pipelines as $pipeline) {
-            if ($pipeline['pipeline_name'] === 'Structured Data Analysis Pipeline') {
-                $pipeline_id = $pipeline['pipeline_id'];
-                break;
-            }
-        }
-        
-        if (!$pipeline_id) {
-            update_option('dm_structured_data_creation_status', 'failed');
-            do_action('dm_log', 'error', 'Failed to create or locate Structured Data Analysis Pipeline');
-            return;
-        }
-        
-        // Create pipeline steps (Data Machine actions work reliably in background jobs)
-        do_action('dm_create', 'step', [
-            'pipeline_id' => $pipeline_id,
-            'step_type' => 'fetch'
-        ]);
-        
-        do_action('dm_create', 'step', [
-            'pipeline_id' => $pipeline_id,
-            'step_type' => 'ai'
-        ]);
-        
-        do_action('dm_create', 'step', [
-            'pipeline_id' => $pipeline_id,
-            'step_type' => 'publish'
-        ]);
-        
-        // Data Machine automatically creates a Draft Flow when steps are added
-        $flows = apply_filters('dm_get_pipeline_flows', [], $pipeline_id);
-        if (empty($flows)) {
-            update_option('dm_structured_data_creation_status', 'failed');
-            do_action('dm_log', 'error', 'No flows found for Structured Data Analysis Pipeline');
-            return;
-        }
-        
-        $flow_id = $flows[0]['flow_id'];
-        
-        // Get flow configuration
-        $flow_config = apply_filters('dm_get_flow_config', [], $flow_id);
-        if (empty($flow_config)) {
-            update_option('dm_structured_data_creation_status', 'failed');
-            do_action('dm_log', 'error', 'Flow configuration not found for Structured Data Analysis Pipeline');
-            return;
-        }
-        
-        // Configure Data Machine handlers for each step type
-        $fetch_step_id = null;
-        foreach ($flow_config as $flow_step_id => $step_config) {
-            $step_type = $step_config['step_type'] ?? '';
-            
-            switch ($step_type) {
-                case 'fetch':
-                    $fetch_step_id = $flow_step_id;
-                    do_action('dm_update_flow_handler', $flow_step_id, 'wordpress', [
-                        'post_type' => 'any',
-                        'post_status' => 'any',
-                        'post_id' => 0
-                    ]);
-                    break;
-                    
-                case 'ai':
-                    do_action('dm_update_flow_handler', $flow_step_id, 'ai', [
-                        'provider' => 'openai',
-                        'model' => 'gpt-5-mini',
-                        'system_prompt' => 'You are an AI assistant that analyzes WordPress content to extract semantic metadata for structured data enhancement.',
-                        'tools' => ['save_semantic_analysis']
-                    ]);
-                    break;
-                    
-                case 'publish':
-                    do_action('dm_update_flow_handler', $flow_step_id, 'structured_data', []);
-                    break;
-            }
-        }
-        
-        // Store component IDs for admin interface access
-        update_option('dm_structured_data_pipeline_id', $pipeline_id);
-        update_option('dm_structured_data_flow_id', $flow_id);
-        update_option('dm_structured_data_fetch_step_id', $fetch_step_id);
-        
-        // Update status for admin interface polling
-        update_option('dm_structured_data_creation_status', 'completed');
-        
-        do_action('dm_log', 'info', 'Structured data pipeline created successfully via Action Scheduler', [
-            'pipeline_id' => $pipeline_id,
-            'flow_id' => $flow_id,
-            'fetch_step_id' => $fetch_step_id
-        ]);
-        
-    } catch (Exception $e) {
-        update_option('dm_structured_data_creation_status', 'failed');
-        do_action('dm_log', 'error', 'Failed to create pipeline via Action Scheduler: ' . $e->getMessage());
-    }
-}
+/**
+ * Pipeline creation is now handled synchronously in the AJAX handler
+ * following the established ImportExport.php pattern
+ */
 
 /**
  * Plugin deactivation hook

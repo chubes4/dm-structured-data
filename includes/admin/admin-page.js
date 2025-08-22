@@ -392,7 +392,7 @@ jQuery(document).ready(function($) {
     }
     
     /**
-     * Handle Create Pipeline button click with status polling
+     * Handle Create Pipeline button click
      */
     $('#create-pipeline-btn').on('click', function() {
         const $button = $(this);
@@ -402,7 +402,7 @@ jQuery(document).ready(function($) {
         // Show loading state
         $button.prop('disabled', true).text('Creating Pipeline...');
         $spinner.addClass('is-active');
-        $result.html('<div class="notice notice-info inline"><p>Starting pipeline creation in background...</p></div>');
+        $result.html('<div class="notice notice-info inline"><p>Creating pipeline...</p></div>');
         
         $.ajax({
             url: dmStructuredData.ajax_url,
@@ -413,9 +413,10 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
-                    $result.html('<div class="notice notice-info inline"><p><strong>In Progress:</strong> ' + escapeHtml(response.data.message) + '</p></div>');
-                    // Start polling for completion
-                    pollPipelineStatus($button, $spinner, $result);
+                    $result.html('<div class="notice notice-success inline"><p><strong>Success!</strong> ' + escapeHtml(response.data.message) + ' Refreshing page...</p></div>');
+                    setTimeout(function() {
+                        location.reload();
+                    }, 2000);
                 } else {
                     $result.html('<div class="notice notice-error inline"><p><strong>Error:</strong> ' + escapeHtml(response.data) + '</p></div>');
                     $button.prop('disabled', false).text('Create Structured Data Pipeline');
@@ -423,60 +424,12 @@ jQuery(document).ready(function($) {
                 }
             },
             error: function(xhr, status, error) {
-                $result.html('<div class="notice notice-error inline"><p><strong>Error:</strong> Failed to start pipeline creation. Please try again.</p></div>');
+                $result.html('<div class="notice notice-error inline"><p><strong>Error:</strong> Failed to create pipeline. Please try again.</p></div>');
                 $button.prop('disabled', false).text('Create Structured Data Pipeline');
                 $spinner.removeClass('is-active');
             }
         });
     });
-
-    /**
-     * Poll pipeline creation status
-     */
-    function pollPipelineStatus($button, $spinner, $result) {
-        setTimeout(function() {
-            $.ajax({
-                url: dmStructuredData.ajax_url,
-                type: 'POST',
-                data: {
-                    action: 'dm_structured_data_check_status',
-                    nonce: dmStructuredData.nonce
-                },
-                success: function(response) {
-                    if (response.success) {
-                        const status = response.data.status;
-                        const pipelineExists = response.data.pipeline_exists;
-                        
-                        if (status === 'completed' && pipelineExists) {
-                            $result.html('<div class="notice notice-success inline"><p><strong>Success!</strong> Pipeline created successfully. Refreshing page...</p></div>');
-                            setTimeout(function() {
-                                location.reload();
-                            }, 2000);
-                        } else if (status === 'failed') {
-                            $result.html('<div class="notice notice-error inline"><p><strong>Error:</strong> Pipeline creation failed. Please try again.</p></div>');
-                            $button.prop('disabled', false).text('Create Structured Data Pipeline');
-                            $spinner.removeClass('is-active');
-                        } else {
-                            // Still in progress - keep polling
-                            $result.html('<div class="notice notice-info inline"><p><strong>In Progress:</strong> Creating pipeline components...</p></div>');
-                            pollPipelineStatus($button, $spinner, $result);
-                        }
-                    } else {
-                        // Error checking status - stop polling
-                        $result.html('<div class="notice notice-error inline"><p><strong>Error:</strong> Failed to check creation status.</p></div>');
-                        $button.prop('disabled', false).text('Create Structured Data Pipeline');
-                        $spinner.removeClass('is-active');
-                    }
-                },
-                error: function() {
-                    // Error - stop polling
-                    $result.html('<div class="notice notice-error inline"><p><strong>Error:</strong> Failed to check creation status.</p></div>');
-                    $button.prop('disabled', false).text('Create Structured Data Pipeline');
-                    $spinner.removeClass('is-active');
-                }
-            });
-        }, 2000); // Check every 2 seconds
-    }
 
     /**
      * Escape HTML for safe display

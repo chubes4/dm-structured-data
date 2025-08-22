@@ -26,7 +26,6 @@ class DM_StructuredData_AdminPage {
         add_action('wp_ajax_dm_structured_data_delete', [$this, 'ajax_delete_data']);
         add_action('wp_ajax_dm_structured_data_bulk_action', [$this, 'ajax_bulk_action']);
         add_action('wp_ajax_dm_structured_data_create_pipeline', [$this, 'ajax_create_pipeline']);
-        add_action('wp_ajax_dm_structured_data_check_status', [$this, 'ajax_check_pipeline_status']);
         
         // Get stored IDs
         $this->flow_id = get_option('dm_structured_data_flow_id');
@@ -36,17 +35,11 @@ class DM_StructuredData_AdminPage {
     /**
      * Check if pipeline exists by name-based detection
      * 
-     * Uses Data Machine's pipeline query to locate the structured data
-     * pipeline by name rather than relying on stored option IDs.
+     * Delegates to the CreatePipeline service for consistency.
      */
     public function pipeline_exists() {
-        $pipelines = apply_filters('dm_get_pipelines', []);
-        foreach ($pipelines as $pipeline) {
-            if ($pipeline['pipeline_name'] === 'Structured Data Analysis Pipeline') {
-                return true;
-            }
-        }
-        return false;
+        $pipeline_service = new DM_StructuredData_CreatePipeline();
+        return $pipeline_service->pipeline_exists();
     }
     
     /**
@@ -172,8 +165,10 @@ class DM_StructuredData_AdminPage {
         
         // Configure WordPress fetch handler to target specific post
         try {
-            do_action('dm_update_flow_handler', $this->fetch_step_id, 'wordpress', [
-                'post_id' => $post_id
+            do_action('dm_update_flow_handler', $this->fetch_step_id, 'wordpress_fetch', [
+                'wordpress_fetch' => [
+                    'post_id' => $post_id
+                ]
             ]);
             
             // Execute pipeline flow for immediate analysis
@@ -315,8 +310,10 @@ class DM_StructuredData_AdminPage {
                 // Execute re-analysis for multiple posts using configured pipeline
                 foreach ($post_ids as $post_id) {
                     // Configure WordPress fetch handler for each post
-                    do_action('dm_update_flow_handler', $this->fetch_step_id, 'wordpress', [
-                        'post_id' => $post_id
+                    do_action('dm_update_flow_handler', $this->fetch_step_id, 'wordpress_fetch', [
+                        'wordpress_fetch' => [
+                            'post_id' => $post_id
+                        ]
                     ]);
                     
                     // Execute flow for this post
@@ -335,10 +332,9 @@ class DM_StructuredData_AdminPage {
     }
     
     /**
-     * AJAX handler for creating the structured data pipeline asynchronously
+     * AJAX handler for creating the structured data pipeline
      * 
-     * Triggers Action Scheduler background job for reliable pipeline creation
-     * outside of admin request context to avoid wp_send_json interruptions.
+     * Delegates to the CreatePipeline service for clean separation of concerns.
      */
     public function ajax_create_pipeline() {
         check_ajax_referer('dm_structured_data_admin', 'nonce');
@@ -347,53 +343,28 @@ class DM_StructuredData_AdminPage {
             wp_die('Insufficient permissions');
         }
         
-        // Check Data Machine dependency
-        if (!has_filter('dm_handlers')) {
-            wp_send_json_error('Data Machine plugin is required for this plugin to work.');
-            return;
-        }
+        // Use dedicated service for pipeline creation
+        $pipeline_service = new DM_StructuredData_CreatePipeline();
+        $result = $pipeline_service->create_pipeline();
         
-        // Check if Action Scheduler is available
-        if (!function_exists('as_schedule_single_action')) {
-            wp_send_json_error('Action Scheduler not available. Unable to create pipeline asynchronously.');
-            return;
-        }
-        
-        // Set creation status for admin interface polling
-        update_option('dm_structured_data_creation_status', 'in_progress');
-        
-        // Schedule Action Scheduler background job
-        $scheduled = as_schedule_single_action(time(), 'dm_structured_data_create_pipeline_async');
-        
-        if ($scheduled) {
-            wp_send_json_success([
-                'message' => 'Pipeline creation started in background. Please wait...',
-                'status' => 'in_progress'
-            ]);
+        if ($result['success']) {
+            wp_send_json_success($result);
         } else {
-            update_option('dm_structured_data_creation_status', 'failed');
-            wp_send_json_error('Failed to schedule pipeline creation job.');
+            wp_send_json_error($result['error']);
         }
     }
     
     /**
-     * AJAX handler for checking pipeline creation status
-     * 
-     * Polls WordPress option status and verifies pipeline existence
-     * for real-time admin interface updates during background creation.
+     * Find pipeline by name using established ImportExport pattern
      */
-    public function ajax_check_pipeline_status() {
-        check_ajax_referer('dm_structured_data_admin', 'nonce');
-        
-        if (!current_user_can('manage_options')) {
-            wp_die('Insufficient permissions');
+    private function find_pipeline_by_name($name) {
+        $all_pipelines = apply_filters('dm_get_pipelines', []);
+        foreach ($all_pipelines as $pipeline) {
+            if ($pipeline['pipeline_name'] === $name) {
+                return $pipeline['pipeline_id'];
+            }
         }
-        
-        $status = get_option('dm_structured_data_creation_status', 'not_started');
-        
-        wp_send_json_success([
-            'status' => $status,
-            'pipeline_exists' => $this->pipeline_exists()
-        ]);
+        return null;
     }
+    
 }
