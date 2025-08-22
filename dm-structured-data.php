@@ -26,7 +26,7 @@ define('DM_STRUCTURED_DATA_URL', plugin_dir_url(__FILE__));
  * 
  * Registers handlers and AI tools with Data Machine pipeline system,
  * initializes Yoast SEO integration for enhanced schema markup, and
- * provides admin interface with Action Scheduler-based pipeline creation.
+ * provides admin interface with synchronous pipeline creation service.
  */
 class DM_StructuredData {
     
@@ -160,28 +160,19 @@ class DM_StructuredData {
 new DM_StructuredData();
 
 /**
- * Action Scheduler hook for asynchronous pipeline creation
- * 
- * Creates the complete structured data pipeline in background to avoid
- * wp_send_json interruption issues during complex Data Machine setup.
- * Uses name-based pipeline detection and stores component IDs in options.
- */
-/**
- * Pipeline creation is now handled synchronously in the AJAX handler
- * following the established ImportExport.php pattern
+ * Pipeline creation is now handled synchronously via CreatePipeline service
+ * following clean service architecture patterns for immediate feedback
  */
 
 /**
  * Plugin deactivation hook
  * 
  * Cleans up stored WordPress options but preserves pipeline entities
- * in Data Machine to avoid wp_send_json_success() interruption during
- * deactivation. Users can manually delete pipelines if needed.
+ * in Data Machine for potential reactivation. Users can manually delete
+ * pipelines via Data Machine interface if needed.
  */
 function dm_structured_data_deactivate() {
-    // Clean up stored options only - don't attempt to delete Data Machine entities
-    // during deactivation as dm_delete action causes wp_send_json_success() redirect
-    // Users can manually delete pipelines from Data Machine admin if needed
+    // Clean up stored options only - preserve Data Machine entities for reactivation
     delete_option('dm_structured_data_pipeline_id');
     delete_option('dm_structured_data_flow_id');
     delete_option('dm_structured_data_fetch_step_id');

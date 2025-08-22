@@ -6,15 +6,16 @@ AI-powered semantic analysis extension for Data Machine that enhances WordPress 
 
 The plugin extends Data Machine's pipeline system with semantic content analysis capabilities that automatically classify WordPress content and inject AI-enriched properties into Yoast-generated schema markup.
 
-**Core Pattern**: Admin Interface → Action Scheduler Pipeline Creation → WordPress Content Analysis → AI Enhancement → Schema Output
+**Core Pattern**: Admin Interface → Synchronous Pipeline Creation → WordPress Content Analysis → AI Enhancement → Schema Output
 
 ## Plugin Structure
 
 ```
 dm-structured-data/
-├── dm-structured-data.php          # Main plugin file with Action Scheduler hooks
+├── dm-structured-data.php          # Main plugin file
 ├── includes/
 │   ├── StructuredDataHandler.php   # Data Machine handler implementation
+│   ├── CreatePipeline.php          # Pipeline creation service
 │   ├── YoastIntegration.php        # Schema enhancement integration
 │   └── admin/
 │       ├── AdminPage.php           # AJAX-powered admin interface
@@ -36,10 +37,10 @@ dm-structured-data/
 - **Integration**: Automatic via Data Machine pipeline system
 
 ### Pipeline Management
-- **Creation Method**: Action Scheduler background job
+- **Creation Method**: Synchronous service via CreatePipeline class
 - **Pipeline Name**: "Structured Data Analysis Pipeline"
 - **Admin Interface**: Data Machine → Structured Data
-- **Status Tracking**: WordPress options and AJAX polling
+- **Status Tracking**: Immediate response with success/error feedback
 
 ## Key Classes
 
@@ -53,6 +54,15 @@ Processes AI tool calls and manages semantic data storage.
 - `needs_update($post_id)` - Validates content freshness
 
 **Data Storage**: WordPress post meta `_dm_structured_data`
+
+### DM_StructuredData_CreatePipeline
+Synchronous pipeline creation service for Data Machine integration.
+
+**Primary Methods**:
+- `create_pipeline()` - Creates complete pipeline with all steps
+- `pipeline_exists()` - Checks if structured data pipeline exists
+- `configure_ai_step($pipeline_id, $ai_step_id)` - Configures AI analysis step
+- `configure_step_handlers($flow_id, $pipeline_id)` - Sets up flow handlers
 
 ### DM_StructuredData_YoastIntegration
 Enhances Yoast schema with AI-generated semantic properties.
@@ -107,7 +117,6 @@ The `save_semantic_analysis` tool accepts these semantic classification paramete
 ## Dependencies
 
 - **Required**: Data Machine plugin (provides pipeline system and AI tool infrastructure)
-- **Required**: Action Scheduler (for background pipeline creation - included with WooCommerce or Data Machine)
 - **Enhanced**: Yoast SEO plugin (provides base schema for enhancement)
 - **WordPress**: 5.0+ with PHP 8.0+
 
@@ -115,8 +124,8 @@ The `save_semantic_analysis` tool accepts these semantic classification paramete
 
 Minimal configuration through admin interface:
 1. Navigate to Data Machine → Structured Data
-2. Click "Create Pipeline" to initiate background setup
-3. Monitor creation status via AJAX polling
+2. Click "Create Pipeline" for immediate setup
+3. Pipeline created synchronously with instant feedback
 4. Use admin interface to analyze posts and manage data
 
 Plugin automatically:
@@ -128,10 +137,10 @@ Plugin automatically:
 
 ### Pipeline Creation Flow
 1. **Admin Trigger**: User clicks "Create Pipeline" in admin interface
-2. **Background Job**: Action Scheduler queues `dm_structured_data_create_pipeline_async`
-3. **Pipeline Setup**: Background job creates pipeline, steps, and flow configuration
-4. **Status Tracking**: Creation status stored in WordPress options
-5. **Admin Polling**: Interface polls status and updates UI when completed
+2. **Service Call**: CreatePipeline service executes synchronously
+3. **Pipeline Setup**: Service creates pipeline, steps, and flow configuration
+4. **Immediate Response**: Success/error feedback returned instantly
+5. **UI Update**: Interface refreshes to show created pipeline
 
 ### Content Analysis Flow
 1. **Analysis Request**: Admin interface or programmatic trigger
@@ -147,8 +156,8 @@ Plugin automatically:
 Provides comprehensive management interface with:
 
 **Pipeline Management**:
-- Automated pipeline creation via Action Scheduler
-- Real-time status polling and progress updates
+- Synchronous pipeline creation via CreatePipeline service
+- Immediate success/error feedback
 - Pipeline existence verification by name detection
 
 **Content Analysis**:
@@ -162,37 +171,35 @@ Provides comprehensive management interface with:
 - Bulk delete and re-analysis operations
 
 **Status Monitoring**:
-- Pipeline creation status tracking
 - Analysis progress indicators
 - Error handling and user feedback
+- Immediate pipeline creation feedback
 
 ### Key AJAX Endpoints
-- `dm_structured_data_create_pipeline` - Trigger background pipeline creation
-- `dm_structured_data_check_status` - Poll pipeline creation status
+- `dm_structured_data_create_pipeline` - Create pipeline synchronously
 - `dm_structured_data_analyze` - Analyze individual posts
 - `dm_structured_data_bulk_action` - Bulk operations (delete, reanalyze)
 - `dm_structured_data_search_posts` - Post search functionality
 
-## Action Scheduler Integration
+## Pipeline Creation Implementation
 
-### Background Pipeline Creation
-- **Hook**: `dm_structured_data_create_pipeline_async`
-- **Function**: `dm_structured_data_create_pipeline_job()`
-- **Purpose**: Reliable pipeline creation outside of admin request context
-- **Benefits**: Avoids wp_send_json interruption issues during complex setup
+### CreatePipeline Service Pattern
+- **Service Class**: `DM_StructuredData_CreatePipeline`
+- **Method**: `create_pipeline()`
+- **Purpose**: Clean, testable pipeline creation with immediate feedback
+- **Benefits**: Synchronous execution, clear error handling, service isolation
 
 ### Pipeline Creation Steps
 1. Check Data Machine dependency availability
-2. Create pipeline using `dm_create` action
-3. Query created pipeline by name to get pipeline_id
-4. Create fetch, AI, and publish steps
-5. Configure flow handlers for each step
-6. Store pipeline IDs in WordPress options
-7. Update creation status to 'completed'
+2. Create pipeline using `dm_create_pipeline` filter
+3. Create fetch, AI, and publish steps using `dm_create_step` filters
+4. Get auto-created flow ID from pipeline
+5. Configure AI step with structured data tools
+6. Configure flow handlers for each step type
+7. Store pipeline IDs in WordPress options
 
-### Status Management
-Pipeline creation status tracked via WordPress options:
-- `dm_structured_data_creation_status`: 'not_started', 'in_progress', 'completed', 'failed'
+### Data Storage
+Pipeline component IDs stored in WordPress options:
 - `dm_structured_data_pipeline_id`: Created pipeline ID
 - `dm_structured_data_flow_id`: Created flow ID  
 - `dm_structured_data_fetch_step_id`: Fetch step ID for targeting

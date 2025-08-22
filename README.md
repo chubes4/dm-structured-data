@@ -46,46 +46,45 @@ AI-powered semantic analysis for enhanced WordPress structured data via [Data Ma
 
 ### Data Machine Pipeline Setup
 
-The plugin provides an admin interface for managing the structured data analysis pipeline. Pipeline creation uses Action Scheduler for reliable background processing.
+The plugin provides an admin interface for managing the structured data analysis pipeline. Pipeline creation uses a synchronous service for immediate feedback and reliable setup.
 
 **Admin Interface Access**:
 - Navigate to Data Machine → Structured Data in WordPress admin
-- Create pipeline through the admin interface (automated setup)
+- Create pipeline through the admin interface (immediate setup)
 - Monitor pipeline status and manage semantic data
 
-**Automatic Pipeline Creation**:
+**Synchronous Pipeline Creation**:
 - Pipeline Name: "Structured Data Analysis Pipeline"
 - Handler: `structured_data` (publish type)
 - AI Tool: `save_semantic_analysis`
-- Background Processing: WordPress Action Scheduler
+- Processing: Immediate synchronous creation via CreatePipeline service
 
 ### WordPress Integration
 
 **Automated Setup** (Recommended)
 1. Navigate to Data Machine → Structured Data in WordPress admin
-2. Click "Create Pipeline" to initiate background setup
-3. Monitor creation status (completed automatically via Action Scheduler)
+2. Click "Create Pipeline" for immediate setup
+3. Receive instant success/error feedback
 4. Use admin interface to analyze posts and manage semantic data
 5. Pipeline automatically configures: Fetch (WordPress) → AI → Publish (Structured Data)
 
 **Manual Pipeline Creation** (Advanced)
 ```php
-// Trigger asynchronous pipeline creation
-if (function_exists('as_schedule_single_action')) {
-    as_schedule_single_action(time(), 'dm_structured_data_create_pipeline_async');
+// Create pipeline using service class
+$pipeline_service = new DM_StructuredData_CreatePipeline();
+$result = $pipeline_service->create_pipeline();
+
+if ($result['success']) {
+    echo "Pipeline created successfully!";
+    echo "Pipeline ID: " . $result['pipeline_id'];
+    echo "Flow ID: " . $result['flow_id'];
+} else {
+    echo "Error: " . $result['error'];
 }
 
-// Check creation status
-$status = get_option('dm_structured_data_creation_status');
-// Status values: 'not_started', 'in_progress', 'completed', 'failed'
-
-// Verify pipeline exists by name
-$pipelines = apply_filters('dm_get_pipelines', []);
-foreach ($pipelines as $pipeline) {
-    if ($pipeline['pipeline_name'] === 'Structured Data Analysis Pipeline') {
-        // Pipeline ready for use
-        break;
-    }
+// Check if pipeline exists
+if ($pipeline_service->pipeline_exists()) {
+    echo "Structured Data Analysis Pipeline is available";
 }
 ```
 
@@ -314,8 +313,10 @@ if (class_exists('DM_StructuredData_Handler')) {
    $fetch_step_id = get_option('dm_structured_data_fetch_step_id');
    
    // Configure for specific post
-   do_action('dm_update_flow_handler', $fetch_step_id, 'wordpress', [
-       'post_id' => $post_id
+   do_action('dm_update_flow_handler', $fetch_step_id, 'wordpress_fetch', [
+       'wordpress_fetch' => [
+           'post_id' => $post_id
+       ]
    ]);
    
    // Execute analysis
@@ -327,11 +328,15 @@ if (class_exists('DM_StructuredData_Handler')) {
 ### Debug Pipeline Processing
 
 ```php
-// Check pipeline creation status
-$status = get_option('dm_structured_data_creation_status');
-echo "Pipeline Status: " . $status; // 'not_started', 'in_progress', 'completed', 'failed'
+// Check if pipeline exists
+$pipeline_service = new DM_StructuredData_CreatePipeline();
+if ($pipeline_service->pipeline_exists()) {
+    echo "Pipeline exists and is ready";
+} else {
+    echo "Pipeline not found - create it first";
+}
 
-// Verify pipeline exists
+// Verify pipeline components
 $pipelines = apply_filters('dm_get_pipelines', []);
 foreach ($pipelines as $pipeline) {
     if ($pipeline['pipeline_name'] === 'Structured Data Analysis Pipeline') {
@@ -350,8 +355,7 @@ do_action('dm_log', 'info', 'Testing structured data pipeline', [
 $flow_id = get_option('dm_structured_data_flow_id');
 do_action('dm_run_flow_now', $flow_id);
 
-// Monitor Action Scheduler jobs
-// Navigate to Tools → Scheduled Actions to view background jobs
+// Monitor pipeline execution
 // Check Data Machine → Jobs for pipeline execution status
 ```
 
@@ -409,13 +413,12 @@ if ($semantic_data) {
 **Plugin Not Working**
 - Verify Data Machine plugin is installed and activated
 - Check WordPress/PHP version requirements
-- Ensure Action Scheduler is available (included with WooCommerce or Data Machine)
 - Confirm admin interface is accessible at Data Machine → Structured Data
 
 **Pipeline Creation Failed**
-- Check Action Scheduler status at Tools → Scheduled Actions
-- Verify pipeline creation status: `get_option('dm_structured_data_creation_status')`
-- Review Data Machine logs for background job errors
+- Check immediate error response in admin interface
+- Verify Data Machine is properly loaded: `has_filter('dm_handlers')`
+- Review Data Machine logs for creation errors
 - Ensure Data Machine handlers are properly registered
 
 **No Semantic Data Generated**
