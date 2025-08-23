@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 class DM_StructuredData_CreatePipeline {
     
     /**
-     * Create the structured data analysis pipeline using new dm_create_ actions.
+     * Create the structured data analysis pipeline using atomic database operations.
      * 
      * Creates a complete pipeline with fetch, AI, and publish steps configured
      * for WordPress content analysis and structured data enhancement.
@@ -30,60 +30,119 @@ class DM_StructuredData_CreatePipeline {
                 ];
             }
             
-            // Create pipeline using new dm_create_pipeline filter
-            $pipeline_id = apply_filters('dm_create_pipeline', false, [
-                'pipeline_name' => 'Structured Data Analysis Pipeline'
+            // Get database services directly
+            $all_databases = apply_filters('dm_db', []);
+            $db_pipelines = $all_databases['pipelines'] ?? null;
+            $db_flows = $all_databases['flows'] ?? null;
+            
+            if (!$db_pipelines || !$db_flows) {
+                return [
+                    'success' => false,
+                    'error' => 'Data Machine database services not available.'
+                ];
+            }
+            
+            // Generate UUIDs for pipeline steps
+            $fetch_step_id = wp_generate_uuid4();
+            $ai_step_id = wp_generate_uuid4();
+            $update_step_id = wp_generate_uuid4();
+            
+            // Create pipeline with complete configuration
+            $pipeline_id = $db_pipelines->create_pipeline([
+                'pipeline_name' => 'Structured Data Analysis Pipeline',
+                'pipeline_config' => [
+                    $fetch_step_id => [
+                        'step_type' => 'fetch',
+                        'execution_order' => 0,
+                        'pipeline_step_id' => $fetch_step_id,
+                        'label' => 'WordPress Fetch'
+                    ],
+                    $ai_step_id => [
+                        'step_type' => 'ai',
+                        'execution_order' => 1,
+                        'pipeline_step_id' => $ai_step_id,
+                        'provider' => 'openai',
+                        'model' => 'gpt-5-mini',
+                        'providers' => [
+                            'openai' => ['model' => 'gpt-5-mini']
+                        ],
+                        'system_prompt' => 'You are an AI assistant that analyzes WordPress content to extract semantic metadata for structured data enhancement. Analyze the content and provide semantic classifications including content_type, audience_level, skill_prerequisites, content_characteristics, primary_intent, actionability, complexity_score, and estimated_completion_time.',
+                        'label' => 'AI Analysis'
+                    ],
+                    $update_step_id => [
+                        'step_type' => 'update',
+                        'execution_order' => 2,
+                        'pipeline_step_id' => $update_step_id,
+                        'label' => 'Update Post Metadata'
+                    ]
+                ]
             ]);
             
             if (!$pipeline_id) {
-                return [
-                    'success' => false,
-                    'error' => 'Failed to create pipeline.'
-                ];
+                return ['success' => false, 'error' => 'Failed to create pipeline.'];
             }
             
-            // Create steps using new dm_create_step filters
-            $fetch_step_id = apply_filters('dm_create_step', false, [
+            // Create flow - returns auto-incremented flow_id
+            $flow_id = $db_flows->create_flow([
                 'pipeline_id' => $pipeline_id,
-                'step_type' => 'fetch'
+                'flow_name' => 'Structured Data Analysis Flow',
+                'flow_config' => [], // Empty initially 
+                'scheduling_config' => ['interval' => 'manual']
             ]);
-            
-            $ai_step_id = apply_filters('dm_create_step', false, [
-                'pipeline_id' => $pipeline_id,
-                'step_type' => 'ai'
-            ]);
-            
-            $publish_step_id = apply_filters('dm_create_step', false, [
-                'pipeline_id' => $pipeline_id,
-                'step_type' => 'publish'
-            ]);
-            
-            if (!$fetch_step_id || !$ai_step_id || !$publish_step_id) {
-                return [
-                    'success' => false,
-                    'error' => 'Failed to create pipeline steps.'
-                ];
-            }
-            
-            // Get the auto-created flow ID (dm_create_pipeline creates a default flow)
-            $flows = apply_filters('dm_get_pipeline_flows', [], $pipeline_id);
-            $flow_id = !empty($flows) ? $flows[0]['flow_id'] : null;
             
             if (!$flow_id) {
-                return [
-                    'success' => false,
-                    'error' => 'Failed to get flow ID.'
+                return ['success' => false, 'error' => 'Failed to create flow.'];
+            }
+            
+            // Build complete flow_config using returned flow_id
+            $flow_config = [];
+            $steps_data = [
+                ['pipeline_step_id' => $fetch_step_id, 'step_type' => 'fetch', 'execution_order' => 0],
+                ['pipeline_step_id' => $ai_step_id, 'step_type' => 'ai', 'execution_order' => 1], 
+                ['pipeline_step_id' => $update_step_id, 'step_type' => 'update', 'execution_order' => 2]
+            ];
+            
+            foreach ($steps_data as $step) {
+                $flow_step_id = apply_filters('dm_generate_flow_step_id', '', $step['pipeline_step_id'], $flow_id);
+                $flow_config[$flow_step_id] = [
+                    'flow_step_id' => $flow_step_id,
+                    'step_type' => $step['step_type'],
+                    'pipeline_step_id' => $step['pipeline_step_id'],
+                    'pipeline_id' => $pipeline_id,
+                    'flow_id' => $flow_id,
+                    'execution_order' => $step['execution_order'],
+                    'handler' => null
                 ];
             }
             
-            // Configure AI step with structured data tools
-            $this->configure_ai_step($pipeline_id, $ai_step_id);
+            // Update flow with complete config
+            $success = $db_flows->update_flow($flow_id, [
+                'flow_config' => $flow_config
+            ]);
             
-            // Configure handlers for each step
-            $this->configure_step_handlers($flow_id, $pipeline_id);
+            if (!$success) {
+                return ['success' => false, 'error' => 'Failed to update flow config.'];
+            }
             
-            // Store component IDs for later use
-            $this->store_pipeline_ids($pipeline_id, $flow_id);
+            // Configure handlers for each flow step
+            foreach ($flow_config as $flow_step_id => $step_config) {
+                switch ($step_config['step_type']) {
+                    case 'fetch':
+                        do_action('dm_update_flow_handler', $flow_step_id, 'wordpress_fetch', [
+                            'post_type' => 'any',
+                            'post_status' => 'any',
+                            'post_id' => 0
+                        ]);
+                        break;
+                    case 'update':
+                        do_action('dm_update_flow_handler', $flow_step_id, 'structured_data', []);
+                        break;
+                }
+            }
+            
+            // Store IDs
+            update_option('dm_structured_data_pipeline_id', $pipeline_id);
+            update_option('dm_structured_data_flow_id', $flow_id);
             
             return [
                 'success' => true,
@@ -101,99 +160,6 @@ class DM_StructuredData_CreatePipeline {
     }
     
     /**
-     * Configure AI step with structured data tools and system prompt.
-     * 
-     * @param int $pipeline_id The pipeline ID
-     * @param string $ai_step_id The AI step ID
-     */
-    private function configure_ai_step(int $pipeline_id, string $ai_step_id): void {
-        // Get current pipeline steps
-        $pipeline_steps = apply_filters('dm_get_pipeline_steps', [], $pipeline_id);
-        
-        // Update AI step with structured data configuration
-        if (isset($pipeline_steps[$ai_step_id])) {
-            $pipeline_steps[$ai_step_id] = array_merge($pipeline_steps[$ai_step_id], [
-                'provider' => 'openai',
-                'model' => 'gpt-5-mini',
-                'providers' => [
-                    'openai' => [
-                        'model' => 'gpt-5-mini'
-                    ]
-                ],
-                'system_prompt' => 'You are an AI assistant that analyzes WordPress content to extract semantic metadata for structured data enhancement.',
-                'ai_tools' => [
-                    'save_semantic_analysis' => [
-                        'description' => 'Save semantic analysis data for structured data enhancement'
-                    ]
-                ]
-            ]);
-            
-            // Update pipeline configuration
-            $all_databases = apply_filters('dm_db', []);
-            $db_pipelines = $all_databases['pipelines'] ?? null;
-            if ($db_pipelines) {
-                $db_pipelines->update_pipeline($pipeline_id, [
-                    'pipeline_config' => json_encode($pipeline_steps)
-                ]);
-            }
-        }
-    }
-    
-    /**
-     * Configure handlers for each step in the flow.
-     * 
-     * @param int $flow_id The flow ID
-     * @param int $pipeline_id The pipeline ID
-     */
-    private function configure_step_handlers(int $flow_id, int $pipeline_id): void {
-        $flow_config = apply_filters('dm_get_flow_config', [], $flow_id);
-        $fetch_step_id = null;
-        
-        foreach ($flow_config as $flow_step_id => $step_config) {
-            $step_type = $step_config['step_type'] ?? '';
-            
-            switch ($step_type) {
-                case 'fetch':
-                    $fetch_step_id = $flow_step_id;
-                    do_action('dm_update_flow_handler', $flow_step_id, 'wordpress_fetch', [
-                        'wordpress_fetch' => [
-                            'post_type' => 'any',
-                            'post_status' => 'any', 
-                            'post_id' => 0
-                        ]
-                    ]);
-                    break;
-                    
-                case 'ai':
-                    // AI steps don't use handlers - configuration is stored in pipeline step definition
-                    break;
-                    
-                case 'publish':
-                    do_action('dm_update_flow_handler', $flow_step_id, 'structured_data', [
-                        'structured_data' => []
-                    ]);
-                    break;
-            }
-        }
-        
-        // Store the fetch step ID for later use
-        if ($fetch_step_id) {
-            update_option('dm_structured_data_fetch_step_id', $fetch_step_id);
-        }
-    }
-    
-    /**
-     * Store pipeline component IDs in WordPress options.
-     * 
-     * @param int $pipeline_id The pipeline ID
-     * @param int $flow_id The flow ID
-     */
-    private function store_pipeline_ids(int $pipeline_id, int $flow_id): void {
-        update_option('dm_structured_data_pipeline_id', $pipeline_id);
-        update_option('dm_structured_data_flow_id', $flow_id);
-    }
-    
-    /**
      * Check if the structured data pipeline already exists.
      * 
      * @return bool True if pipeline exists, false otherwise
@@ -206,5 +172,40 @@ class DM_StructuredData_CreatePipeline {
             }
         }
         return false;
+    }
+    
+    /**
+     * Get the flow step ID for a specific step type in the structured data flow.
+     * 
+     * @param string $step_type Step type to find (fetch, ai, publish)
+     * @return string|null Flow step ID or null if not found
+     */
+    public function get_flow_step_id(string $step_type): ?string {
+        $flow_id = get_option('dm_structured_data_flow_id');
+        if (!$flow_id) {
+            return null;
+        }
+        
+        // Get database services
+        $all_databases = apply_filters('dm_db', []);
+        $db_flows = $all_databases['flows'] ?? null;
+        
+        if (!$db_flows) {
+            return null;
+        }
+        
+        $flow = $db_flows->get_flow($flow_id);
+        if (!$flow || !isset($flow['flow_config'])) {
+            return null;
+        }
+        
+        // Find flow step with matching step_type
+        foreach ($flow['flow_config'] as $flow_step_id => $step_config) {
+            if (isset($step_config['step_type']) && $step_config['step_type'] === $step_type) {
+                return $flow_step_id;
+            }
+        }
+        
+        return null;
     }
 }

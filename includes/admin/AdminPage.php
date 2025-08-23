@@ -2,7 +2,7 @@
 /**
  * Admin Management Page for Structured Data Plugin
  * 
- * Provides comprehensive admin interface with Action Scheduler-based pipeline creation,
+ * Provides comprehensive admin interface with synchronous pipeline creation,
  * AJAX-powered post analysis, bulk operations, and real-time status monitoring for
  * managing semantic data and pipeline operations.
  */
@@ -14,8 +14,6 @@ if (!defined('ABSPATH')) {
 class DM_StructuredData_AdminPage {
     
     private $page_slug = 'dm-structured-data';
-    private $flow_id = null;
-    private $fetch_step_id = null;
     
     public function __construct() {
         add_filter('dm_admin_pages', [$this, 'register_admin_page']);
@@ -26,21 +24,8 @@ class DM_StructuredData_AdminPage {
         add_action('wp_ajax_dm_structured_data_delete', [$this, 'ajax_delete_data']);
         add_action('wp_ajax_dm_structured_data_bulk_action', [$this, 'ajax_bulk_action']);
         add_action('wp_ajax_dm_structured_data_create_pipeline', [$this, 'ajax_create_pipeline']);
-        
-        // Get stored IDs
-        $this->flow_id = get_option('dm_structured_data_flow_id');
-        $this->fetch_step_id = get_option('dm_structured_data_fetch_step_id');
     }
     
-    /**
-     * Check if pipeline exists by name-based detection
-     * 
-     * Delegates to the CreatePipeline service for consistency.
-     */
-    public function pipeline_exists() {
-        $pipeline_service = new DM_StructuredData_CreatePipeline();
-        return $pipeline_service->pipeline_exists();
-    }
     
     /**
      * Register admin page with Data Machine
@@ -159,31 +144,35 @@ class DM_StructuredData_AdminPage {
         }
         
         // Verify pipeline exists using name-based detection
-        if (!$this->pipeline_exists()) {
+        $pipeline_service = new DM_StructuredData_CreatePipeline();
+        if (!$pipeline_service->pipeline_exists()) {
             wp_send_json_error('Structured data pipeline not found. Please create the pipeline first.');
         }
         
         // Configure WordPress fetch handler to target specific post
         try {
-            do_action('dm_update_flow_handler', $this->fetch_step_id, 'wordpress_fetch', [
-                'wordpress_fetch' => [
-                    'post_id' => $post_id
-                ]
+            $fetch_step_id = $pipeline_service->get_flow_step_id('fetch');
+            if (!$fetch_step_id) {
+                wp_send_json_error('Could not find fetch step in flow configuration.');
+            }
+            
+            do_action('dm_update_flow_handler', $fetch_step_id, 'wordpress_fetch', [
+                'post_id' => $post_id
             ]);
             
             // Execute pipeline flow for immediate analysis
-            do_action('dm_run_flow_now', $this->flow_id);
+            $flow_id = get_option('dm_structured_data_flow_id');
+            do_action('dm_run_flow_now', $flow_id);
             
             wp_send_json_success([
                 'message' => 'Structured data processing started',
                 'post_id' => $post_id,
-                'flow_id' => $this->flow_id
+                'flow_id' => get_option('dm_structured_data_flow_id')
             ]);
         } catch (Exception $e) {
             do_action('dm_log', 'error', 'Failed to run structured data flow: ' . $e->getMessage(), [
                 'post_id' => $post_id,
-                'flow_id' => $this->flow_id,
-                'fetch_step_id' => $this->fetch_step_id,
+                'flow_id' => get_option('dm_structured_data_flow_id'),
                 'error' => $e->getMessage()
             ]);
             
@@ -302,22 +291,28 @@ class DM_StructuredData_AdminPage {
                 
             case 'reanalyze':
                 // Verify pipeline exists for bulk operations
-                if (!$this->pipeline_exists()) {
+                $pipeline_service = new DM_StructuredData_CreatePipeline();
+                if (!$pipeline_service->pipeline_exists()) {
                     wp_send_json_error('Structured data pipeline not found. Please create the pipeline first.');
                     break;
                 }
                 
                 // Execute re-analysis for multiple posts using configured pipeline
+                $fetch_step_id = $pipeline_service->get_flow_step_id('fetch');
+                if (!$fetch_step_id) {
+                    wp_send_json_error('Could not find fetch step in flow configuration.');
+                    break;
+                }
+                
                 foreach ($post_ids as $post_id) {
                     // Configure WordPress fetch handler for each post
-                    do_action('dm_update_flow_handler', $this->fetch_step_id, 'wordpress_fetch', [
-                        'wordpress_fetch' => [
-                            'post_id' => $post_id
-                        ]
+                    do_action('dm_update_flow_handler', $fetch_step_id, 'wordpress_fetch', [
+                        'post_id' => $post_id
                     ]);
                     
                     // Execute flow for this post
-                    do_action('dm_run_flow_now', $this->flow_id);
+                    $flow_id = get_option('dm_structured_data_flow_id');
+                    do_action('dm_run_flow_now', $flow_id);
                     $results[] = $post_id;
                 }
                 wp_send_json_success([
@@ -337,34 +332,47 @@ class DM_StructuredData_AdminPage {
      * Delegates to the CreatePipeline service for clean separation of concerns.
      */
     public function ajax_create_pipeline() {
+        do_action('dm_log', 'info', 'AJAX create pipeline method called', [
+            'action' => $_POST['action'] ?? 'not_set',
+            'nonce_provided' => isset($_POST['nonce']),
+            'user_can_manage' => current_user_can('manage_options')
+        ]);
+        
         check_ajax_referer('dm_structured_data_admin', 'nonce');
         
         if (!current_user_can('manage_options')) {
+            do_action('dm_log', 'error', 'Insufficient permissions for pipeline creation');
             wp_die('Insufficient permissions');
         }
         
-        // Use dedicated service for pipeline creation
-        $pipeline_service = new DM_StructuredData_CreatePipeline();
-        $result = $pipeline_service->create_pipeline();
-        
-        if ($result['success']) {
-            wp_send_json_success($result);
-        } else {
-            wp_send_json_error($result['error']);
+        try {
+            do_action('dm_log', 'debug', 'Instantiating CreatePipeline service');
+            
+            // Use dedicated service for pipeline creation
+            $pipeline_service = new DM_StructuredData_CreatePipeline();
+            
+            do_action('dm_log', 'debug', 'Calling create_pipeline method');
+            $result = $pipeline_service->create_pipeline();
+            
+            do_action('dm_log', 'debug', 'CreatePipeline service completed', [
+                'success' => $result['success'] ?? false,
+                'has_error' => isset($result['error'])
+            ]);
+            
+            if ($result['success']) {
+                wp_send_json_success($result);
+            } else {
+                wp_send_json_error($result['error']);
+            }
+        } catch (Exception $e) {
+            do_action('dm_log', 'error', 'Exception in ajax_create_pipeline', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            wp_send_json_error('Pipeline creation failed: ' . $e->getMessage());
         }
     }
     
-    /**
-     * Find pipeline by name using established ImportExport pattern
-     */
-    private function find_pipeline_by_name($name) {
-        $all_pipelines = apply_filters('dm_get_pipelines', []);
-        foreach ($all_pipelines as $pipeline) {
-            if ($pipeline['pipeline_name'] === $name) {
-                return $pipeline['pipeline_id'];
-            }
-        }
-        return null;
-    }
     
 }

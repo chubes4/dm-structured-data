@@ -38,8 +38,7 @@ if ($posts_query->have_posts()) {
                 'post_title' => get_the_title(),
                 'content_type' => $structured_data['content_type'] ?? 'N/A',
                 'audience_level' => $structured_data['audience_level'] ?? 'N/A',
-                'complexity_score' => $structured_data['complexity_score'] ?? null,
-                'generated_at' => $structured_data['generated_at'] ?? time()
+                'complexity_score' => $structured_data['complexity_score'] ?? null
             ];
         }
     }
@@ -52,9 +51,9 @@ if ($posts_query->have_posts()) {
     <p>AI-powered semantic analysis for WordPress content. Analyze posts to generate structured data that enhances search engine understanding.</p>
     
     <?php 
-    // Check if pipeline exists - get admin page instance
-    global $dm_structured_data_admin_page;
-    if (!$dm_structured_data_admin_page || !$dm_structured_data_admin_page->pipeline_exists()): 
+    // Check if pipeline exists
+    $pipeline_service = new DM_StructuredData_CreatePipeline();
+    if (!$pipeline_service->pipeline_exists()): 
     ?>
     <div class="notice notice-info">
         <p><strong>Setup Required:</strong> The Structured Data Analysis Pipeline needs to be created before you can analyze content.</p>
@@ -124,7 +123,7 @@ if ($posts_query->have_posts()) {
                     <th class="manage-column column-content-type">Content Type</th>
                     <th class="manage-column column-audience">Audience Level</th>
                     <th class="manage-column column-complexity">Complexity</th>
-                    <th class="manage-column column-date">Analyzed</th>
+                    <th class="manage-column column-date">Modified</th>
                     <th class="manage-column column-actions">Actions</th>
                 </tr>
             </thead>
@@ -170,7 +169,7 @@ if ($posts_query->have_posts()) {
                                 </span>
                             </td>
                             <td class="column-date">
-                                <?php echo esc_html(date('M j, Y', $post_data['generated_at'] ?? time())); ?>
+                                <?php echo esc_html(get_the_modified_date('M j, Y', $post_data['post_id'])); ?>
                             </td>
                             <td class="column-actions">
                                 <div class="actions">

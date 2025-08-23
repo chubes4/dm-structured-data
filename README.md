@@ -309,14 +309,13 @@ if (class_exists('DM_StructuredData_Handler')) {
 3. **Manual Execution**: Test individual posts via admin interface or programmatically:
    ```php
    // Get pipeline components
+   $pipeline_service = new DM_StructuredData_CreatePipeline();
    $flow_id = get_option('dm_structured_data_flow_id');
-   $fetch_step_id = get_option('dm_structured_data_fetch_step_id');
+   $fetch_step_id = $pipeline_service->get_flow_step_id('fetch');
    
    // Configure for specific post
    do_action('dm_update_flow_handler', $fetch_step_id, 'wordpress_fetch', [
-       'wordpress_fetch' => [
-           'post_id' => $post_id
-       ]
+       'post_id' => $post_id
    ]);
    
    // Execute analysis

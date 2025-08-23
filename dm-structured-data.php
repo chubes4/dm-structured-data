@@ -44,7 +44,7 @@ class DM_StructuredData {
         $this->load_includes();
         
         add_filter('dm_handlers', [$this, 'register_handlers']);
-        add_filter('ai_tools', [$this, 'register_ai_tools']);
+        add_filter('ai_tools', [$this, 'register_ai_tools'], 10, 3);
         
         // Only load Yoast integration if Yoast SEO is active
         if ($this->is_yoast_active()) {
@@ -83,10 +83,10 @@ class DM_StructuredData {
      */
     public function register_handlers($handlers) {
         $handlers['structured_data'] = [
-            'type' => 'publish',
+            'type' => 'update',
             'class' => 'DM_StructuredData_Handler',
             'label' => 'Structured Data',
-            'description' => 'Save AI semantic analysis to WordPress post meta for enhanced schema markup'
+            'description' => 'Update existing WordPress posts with AI semantic analysis for enhanced schema markup'
         ];
         
         return $handlers;
@@ -95,61 +95,59 @@ class DM_StructuredData {
     /**
      * Register save_semantic_analysis AI tool with Data Machine
      * 
-     * Defines AI tool parameters for semantic content analysis including
-     * content classification, audience targeting, and complexity metrics.
+     * Follows Data Machine's established conditional tool registration pattern.
+     * Only registers tool when structured_data handler is the target handler.
      * 
      * @param array $tools Existing AI tools array
+     * @param string $handler_slug Handler slug for conditional registration
+     * @param array $handler_config Handler configuration
      * @return array Modified tools array with semantic analysis tool
      */
-    public function register_ai_tools($tools) {
-        $tools['save_semantic_analysis'] = [
-            'class' => 'DM_StructuredData_Handler',
-            'method' => 'handle_tool_call',
-            'handler' => 'structured_data',
-            'description' => 'Save semantic content analysis to WordPress post meta for AI-enhanced structured data. Analyze content and extract semantic metadata including content type, audience level, prerequisites, and characteristics that help AI crawlers better understand and categorize the content.',
+    public function register_ai_tools($tools, $handler_slug = null, $handler_config = []) {
+        // Only generate structured_data tool when it's the target handler
+        if ($handler_slug === 'structured_data') {
+            $tools['save_semantic_analysis'] = [
+                'class' => 'DM_StructuredData_Handler',
+                'method' => 'handle_tool_call',
+                'handler' => 'structured_data',
+                'description' => 'Extract semantic metadata from content for AI crawler optimization',
+                'handler_config' => $handler_config,
             'parameters' => [
                 'content_type' => [
                     'type' => 'string',
-                    'description' => 'Primary content classification: tutorial, guide, reference, opinion, review, how-to, announcement, case-study, comparison',
-                    'required' => false
+                    'description' => 'Content classification: tutorial, guide, reference, opinion, review, how-to, announcement, case-study, comparison'
                 ],
                 'audience_level' => [
                     'type' => 'string', 
-                    'description' => 'Target skill level: beginner, intermediate, advanced, expert',
-                    'required' => false
+                    'description' => 'Skill level: beginner, intermediate, advanced, expert'
                 ],
                 'skill_prerequisites' => [
                     'type' => 'array',
-                    'description' => 'Required knowledge or skills to understand this content (e.g., "PHP basics", "WordPress hooks", "JavaScript")',
-                    'required' => false
+                    'description' => 'Required knowledge/skills'
                 ],
                 'content_characteristics' => [
                     'type' => 'array',
-                    'description' => 'Content traits: practical, theoretical, step-by-step, code-heavy, visual, reference, hands-on, conceptual',
-                    'required' => false
+                    'description' => 'Content traits: practical, theoretical, step-by-step, code-heavy, visual, reference, hands-on, conceptual'
                 ],
                 'primary_intent' => [
                     'type' => 'string',
-                    'description' => 'Main purpose: educational, commercial, informational, entertainment, promotional, problem-solving',
-                    'required' => false
+                    'description' => 'Main purpose: educational, commercial, informational, entertainment, promotional, problem-solving'
                 ],
                 'actionability' => [
                     'type' => 'string',
-                    'description' => 'Implementation level: theoretical, practical, step-by-step, reference-only, immediately-actionable',
-                    'required' => false
+                    'description' => 'Implementation level: theoretical, practical, step-by-step, reference-only, immediately-actionable'
                 ],
                 'complexity_score' => [
                     'type' => 'integer',
-                    'description' => 'Content difficulty rating from 1-10 (1=very simple, 10=expert level)',
-                    'required' => false
+                    'description' => 'Difficulty rating 1-10'
                 ],
                 'estimated_completion_time' => [
                     'type' => 'integer', 
-                    'description' => 'Time to complete/implement content in minutes',
-                    'required' => false
+                    'description' => 'Implementation time in minutes'
                 ]
             ]
         ];
+        }
         
         return $tools;
     }
@@ -159,10 +157,6 @@ class DM_StructuredData {
 // Initialize plugin
 new DM_StructuredData();
 
-/**
- * Pipeline creation is now handled synchronously via CreatePipeline service
- * following clean service architecture patterns for immediate feedback
- */
 
 /**
  * Plugin deactivation hook
@@ -175,6 +169,5 @@ function dm_structured_data_deactivate() {
     // Clean up stored options only - preserve Data Machine entities for reactivation
     delete_option('dm_structured_data_pipeline_id');
     delete_option('dm_structured_data_flow_id');
-    delete_option('dm_structured_data_fetch_step_id');
 }
 register_deactivation_hook(__FILE__, 'dm_structured_data_deactivate');

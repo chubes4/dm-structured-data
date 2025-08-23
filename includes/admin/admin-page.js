@@ -162,7 +162,7 @@ jQuery(document).ready(function($) {
             },
             success: function(response) {
                 if (response.success) {
-                    showNotice('Structured data added successfully! Refresh page to see results.', 'success');
+                    showNotice('Structured data analysis started! Processing may take a few moments.', 'success');
                     addStructuredDataBtn.text('Add Structured Data').prop('disabled', false);
                 } else {
                     showNotice('Failed to add structured data: ' + response.data, 'error');
@@ -399,11 +399,16 @@ jQuery(document).ready(function($) {
         const $spinner = $('#create-pipeline-spinner');
         const $result = $('#create-pipeline-result');
         
+        console.log('DM Structured Data: Create pipeline button clicked');
+        console.log('DM Structured Data: AJAX URL:', dmStructuredData.ajax_url);
+        console.log('DM Structured Data: Nonce:', dmStructuredData.nonce);
+        
         // Show loading state
         $button.prop('disabled', true).text('Creating Pipeline...');
         $spinner.addClass('is-active');
         $result.html('<div class="notice notice-info inline"><p>Creating pipeline...</p></div>');
         
+        console.log('DM Structured Data: Making AJAX request...');
         $.ajax({
             url: dmStructuredData.ajax_url,
             type: 'POST',
@@ -411,19 +416,26 @@ jQuery(document).ready(function($) {
                 action: 'dm_structured_data_create_pipeline',
                 nonce: dmStructuredData.nonce
             },
+            beforeSend: function() {
+                console.log('DM Structured Data: AJAX request sent');
+            },
             success: function(response) {
+                console.log('DM Structured Data: AJAX response received:', response);
                 if (response.success) {
-                    $result.html('<div class="notice notice-success inline"><p><strong>Success!</strong> ' + escapeHtml(response.data.message) + ' Refreshing page...</p></div>');
-                    setTimeout(function() {
-                        location.reload();
-                    }, 2000);
+                    console.log('DM Structured Data: Pipeline creation successful');
+                    $result.html('<div class="notice notice-success inline"><p><strong>Success!</strong> ' + escapeHtml(response.data.message) + '</p></div>');
+                    // Reset button state - no page refresh needed
+                    $button.prop('disabled', false).text('Create Structured Data Pipeline');
+                    $spinner.removeClass('is-active');
                 } else {
+                    console.log('DM Structured Data: Pipeline creation failed:', response.data);
                     $result.html('<div class="notice notice-error inline"><p><strong>Error:</strong> ' + escapeHtml(response.data) + '</p></div>');
                     $button.prop('disabled', false).text('Create Structured Data Pipeline');
                     $spinner.removeClass('is-active');
                 }
             },
             error: function(xhr, status, error) {
+                console.log('DM Structured Data: AJAX error:', {xhr: xhr, status: status, error: error});
                 $result.html('<div class="notice notice-error inline"><p><strong>Error:</strong> Failed to create pipeline. Please try again.</p></div>');
                 $button.prop('disabled', false).text('Create Structured Data Pipeline');
                 $spinner.removeClass('is-active');

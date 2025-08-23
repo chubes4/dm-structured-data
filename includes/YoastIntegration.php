@@ -37,15 +37,33 @@ class DM_StructuredData_YoastIntegration {
         
         $post_id = $this->get_post_id_from_context($context);
         
+        do_action('dm_log', 'debug', 'Yoast Integration: Attempting schema enhancement', [
+            'post_id' => $post_id,
+            'context_type' => is_object($context) ? get_class($context) : gettype($context)
+        ]);
+        
         if (!$post_id || !DM_StructuredData_Handler::has_structured_data($post_id)) {
+            do_action('dm_log', 'debug', 'Yoast Integration: No structured data found', [
+                'post_id' => $post_id,
+                'has_data' => $post_id ? DM_StructuredData_Handler::has_structured_data($post_id) : false
+            ]);
             return $graph;
         }
         
         $structured_data = DM_StructuredData_Handler::get_structured_data($post_id);
         
         if (empty($structured_data)) {
+            do_action('dm_log', 'debug', 'Yoast Integration: Empty structured data', [
+                'post_id' => $post_id,
+                'data' => $structured_data
+            ]);
             return $graph;
         }
+        
+        do_action('dm_log', 'info', 'Yoast Integration: Enhancing schema with AI data', [
+            'post_id' => $post_id,
+            'data_keys' => array_keys($structured_data)
+        ]);
         
         return $this->inject_ai_enrichment($graph, $structured_data);
     }
@@ -148,7 +166,7 @@ class DM_StructuredData_YoastIntegration {
         ];
         
         foreach ($field_mapping as $source_field => $target_field) {
-            if (isset($structured_data[$source_field]) && !empty($structured_data[$source_field])) {
+            if (isset($structured_data[$source_field]) && $structured_data[$source_field] !== null) {
                 $enrichment[$target_field] = $structured_data[$source_field];
             }
         }

@@ -59,10 +59,9 @@ Processes AI tool calls and manages semantic data storage.
 Synchronous pipeline creation service for Data Machine integration.
 
 **Primary Methods**:
-- `create_pipeline()` - Creates complete pipeline with all steps
+- `create_pipeline()` - Creates complete pipeline with all steps atomically
 - `pipeline_exists()` - Checks if structured data pipeline exists
-- `configure_ai_step($pipeline_id, $ai_step_id)` - Configures AI analysis step
-- `configure_step_handlers($flow_id, $pipeline_id)` - Sets up flow handlers
+- `get_flow_step_id($step_type)` - Gets flow step ID for specific step type
 
 ### DM_StructuredData_YoastIntegration
 Enhances Yoast schema with AI-generated semantic properties.
@@ -201,8 +200,7 @@ Provides comprehensive management interface with:
 ### Data Storage
 Pipeline component IDs stored in WordPress options:
 - `dm_structured_data_pipeline_id`: Created pipeline ID
-- `dm_structured_data_flow_id`: Created flow ID  
-- `dm_structured_data_fetch_step_id`: Fetch step ID for targeting
+- `dm_structured_data_flow_id`: Created flow ID
 
 ## Pipeline Detection Pattern
 

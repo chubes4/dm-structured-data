@@ -16,35 +16,60 @@ class DM_StructuredData_Handler {
     /**
      * Process AI tool call for semantic analysis
      * 
-     * Validates context, sanitizes parameters, and stores semantic
-     * metadata to WordPress post meta for schema enhancement.
+     * Called by Data Machine publish step with AI tool parameters and tool definition.
+     * Extracts post context from parameters and stores semantic metadata to WordPress post meta.
      * 
      * @param array $parameters AI tool parameters with semantic classifications
-     * @param array $context Pipeline context including source_item_id and content
+     * @param array $tool_def Tool definition from Data Machine (contains class, method, handler info)
      * @return array Result with success status, message, and data
      */
-    public function handle_tool_call($parameters, $context = []) {
-        if (!isset($context['source_item_id'])) {
+    public function handle_tool_call($parameters, $tool_def = []) {
+        // Extract post ID using multiple strategies from parameters and tool definition
+        $post_id = $this->extract_post_id_from_context($parameters, $tool_def);
+        
+        if (!$post_id) {
+            do_action('dm_log', 'error', 'StructuredData Handler: No post ID found', [
+                'parameters_keys' => array_keys($parameters),
+                'tool_def' => $tool_def
+            ]);
             return [
                 'success' => false,
-                'message' => 'No source post ID found in context'
+                'message' => 'No post ID found in AI tool parameters'
             ];
         }
         
-        $post_id = $context['source_item_id'];
-        
-        if (!get_post($post_id)) {
+        $post = get_post($post_id);
+        if (!$post) {
+            do_action('dm_log', 'error', 'StructuredData Handler: Post not found', [
+                'post_id' => $post_id
+            ]);
             return [
                 'success' => false,
                 'message' => "Post with ID {$post_id} not found"
             ];
         }
         
-        $structured_data = $this->prepare_structured_data($parameters, $context);
+        $structured_data = $this->prepare_structured_data($parameters, $post);
+        
+        if (empty($structured_data)) {
+            do_action('dm_log', 'error', 'StructuredData Handler: No valid semantic data to save', [
+                'post_id' => $post_id,
+                'parameters_keys' => array_keys($parameters)
+            ]);
+            return [
+                'success' => false,
+                'message' => 'No valid semantic data to save'
+            ];
+        }
         
         $result = update_post_meta($post_id, '_dm_structured_data', $structured_data);
         
         if ($result) {
+            do_action('dm_log', 'info', 'StructuredData Handler: Analysis saved successfully', [
+                'post_id' => $post_id,
+                'post_title' => $post->post_title,
+                'data_keys' => array_keys($structured_data)
+            ]);
             return [
                 'success' => true,
                 'message' => "Semantic analysis saved to post {$post_id}",
@@ -55,6 +80,10 @@ class DM_StructuredData_Handler {
                 ]
             ];
         } else {
+            do_action('dm_log', 'error', 'StructuredData Handler: Failed to save analysis', [
+                'post_id' => $post_id,
+                'post_title' => $post->post_title
+            ]);
             return [
                 'success' => false,
                 'message' => "Failed to save semantic analysis to post {$post_id}"
@@ -63,25 +92,45 @@ class DM_StructuredData_Handler {
     }
     
     /**
+     * Extract post ID from tool parameters following established pattern
+     * 
+     * The Update step provides original_id from data packet metadata.
+     * This follows the single, established pattern from Data Machine.
+     * 
+     * @param array $parameters Tool call parameters from Update step
+     * @param array $tool_def Tool definition with handler config
+     * @return int|null Post ID or null if not found
+     */
+    private function extract_post_id_from_context($parameters, $tool_def) {
+        // Primary pattern: Update step extracts original_id from data packet metadata
+        if (isset($parameters['original_id']) && is_numeric($parameters['original_id'])) {
+            do_action('dm_log', 'debug', 'StructuredData Handler: Found post ID from Update step', [
+                'post_id' => (int)$parameters['original_id']
+            ]);
+            return (int)$parameters['original_id'];
+        }
+        
+        // Debugging - log what was actually provided
+        do_action('dm_log', 'error', 'StructuredData Handler: original_id not found in parameters', [
+            'parameters_keys' => array_keys($parameters),
+            'expected_field' => 'original_id'
+        ]);
+        
+        return null;
+    }
+    
+    /**
      * Prepare and sanitize structured data for storage
      * 
-     * Combines AI parameters with metadata including generation timestamp,
-     * AI model, content hash, and plugin version for tracking.
+     * Extracts only semantic analysis fields from AI parameters,
+     * removing unnecessary metadata bloat for clean storage.
      * 
      * @param array $parameters AI tool parameters
-     * @param array $context Pipeline context
-     * @return array Structured data ready for storage
+     * @param WP_Post $post WordPress post object
+     * @return array Clean structured data with only semantic fields
      */
-    private function prepare_structured_data($parameters, $context) {
-        $post_content = isset($context['content']) ? $context['content'] : '';
-        $content_hash = md5($post_content);
-        
-        $structured_data = [
-            'generated_at' => current_time('timestamp'),
-            'ai_model' => $context['ai_model'] ?? 'unknown',
-            'content_hash' => $content_hash,
-            'plugin_version' => DM_STRUCTURED_DATA_VERSION
-        ];
+    private function prepare_structured_data($parameters, $post) {
+        $structured_data = [];
         
         $semantic_fields = [
             'content_type',
@@ -95,8 +144,11 @@ class DM_StructuredData_Handler {
         ];
         
         foreach ($semantic_fields as $field) {
-            if (isset($parameters[$field]) && !empty($parameters[$field])) {
-                $structured_data[$field] = $this->sanitize_field($field, $parameters[$field]);
+            if (isset($parameters[$field])) {
+                $sanitized = $this->sanitize_field($field, $parameters[$field]);
+                if ($sanitized !== null) {
+                    $structured_data[$field] = $sanitized;
+                }
             }
         }
         
@@ -116,6 +168,11 @@ class DM_StructuredData_Handler {
      * @return mixed Sanitized value
      */
     private function sanitize_field($field, $value) {
+        // Only filter truly empty values
+        if ($value === null || $value === '' || (is_array($value) && count($value) === 0)) {
+            return null;
+        }
+        
         switch ($field) {
             case 'content_type':
             case 'audience_level':
@@ -126,9 +183,10 @@ class DM_StructuredData_Handler {
             case 'skill_prerequisites':
             case 'content_characteristics':
                 if (is_array($value)) {
-                    return array_map('sanitize_text_field', $value);
+                    $filtered = array_filter(array_map('sanitize_text_field', $value));
+                    return !empty($filtered) ? array_values($filtered) : null;
                 }
-                return [];
+                return null;
                 
             case 'complexity_score':
             case 'estimated_completion_time':
